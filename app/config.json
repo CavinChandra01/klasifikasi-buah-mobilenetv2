@@ -1,0 +1,24 @@
+{
+  "model_file": "fruit_mobilenetv2.keras",
+  "img_size": 224,
+  "classes": [
+    "freshapples",
+    "freshbanana",
+    "freshoranges",
+    "rottenapples",
+    "rottenbanana",
+    "rottenoranges"
+  ],
+  "display_names": {
+    "freshapples": "Apel Segar",
+    "freshbanana": "Pisang Segar",
+    "freshoranges": "Jeruk Segar",
+    "rottenapples": "Apel Busuk",
+    "rottenbanana": "Pisang Busuk",
+    "rottenoranges": "Jeruk Busuk"
+  },
+  "confidence_threshold": 0.949999988079071,
+  "input": "Gambar RGB di-resize ke 224x224, nilai piksel 0-255 (float32). Normalisasi ke [-1,1] sudah ada di dalam model.",
+  "tensorflow_version": "2.20.0",
+  "keras_version": "3.13.2"
+}
