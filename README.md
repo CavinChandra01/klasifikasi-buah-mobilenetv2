@@ -4,8 +4,8 @@ Proyek Ujian Akhir Semester mata kuliah Pembelajaran Mendalam, Semester Ganjil T
 
 Model mengklasifikasikan citra buah ke dalam **6 kelas**: apel segar, pisang segar, jeruk segar, apel busuk, pisang busuk, dan jeruk busuk.
 
-- **Aplikasi (Streamlit Community Cloud):** _tambahkan link aplikasi di sini_
-- **Notebook Kaggle:** _tambahkan link notebook Kaggle di sini_
+- **Aplikasi (Streamlit Community Cloud):** https://klasifikasi-buah-segar-busuk.streamlit.app/
+- **Notebook Kaggle:** https://www.kaggle.com/code/cavinchandra/notebookd31b9accff
 - **Dataset:** [Fruits fresh and rotten for classification (Kaggle)](https://www.kaggle.com/datasets/sriramr/fruits-fresh-and-rotten-for-classification)
 
 ## Anggota kelompok
