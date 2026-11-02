@@ -5,11 +5,14 @@ Fitur:
 - Prediksi 6 kelas (apel/pisang/jeruk, segar/busuk) beserta probabilitas tiap kelas
 - Confidence threshold: prediksi di bawah ambang ditolak sebagai "tidak yakin / bukan buah yang dikenali"
 - Grad-CAM: heatmap area gambar yang paling memengaruhi keputusan model
+- (Proyek-1) Model TensorFlow Lite terkompresi sebagai alternatif model Keras
+- (Proyek-1) Test-Time Augmentation: prediksi dirata-rata dari 4 versi gambar
 
 Jalankan lokal:
     pip install -r requirements.txt
     streamlit run streamlit_app.py
 """
+import glob
 import json
 import os
 import time
@@ -41,7 +44,21 @@ def load_model():
     return cfg, model, parts
 
 
+@st.cache_resource(show_spinner="Memuat model TFLite...")
+def load_tflite(path):
+    interp = tf.lite.Interpreter(model_path=path, num_threads=2)
+    inp = interp.get_input_details()[0]["index"]
+    out = interp.get_output_details()[0]["index"]
+    interp.resize_tensor_input(inp, [1, 224, 224, 3])
+    interp.allocate_tensors()
+    return interp, inp, out
+
+
 CFG, MODEL, PARTS = load_model()
+TFLITE_FILES = {
+    "TFLite " + os.path.basename(p).replace("fruit_mobilenetv2_", "").replace(".tflite", ""): p
+    for p in sorted(glob.glob(os.path.join(HERE, "fruit_mobilenetv2_*.tflite")))
+}
 IMG_SIZE = CFG["img_size"]
 CLASSES = CFG["classes"]
 NAMES = CFG["display_names"]
@@ -71,6 +88,28 @@ def grad_cam(img_uint8):
     return cam.numpy(), probs[0].numpy()
 
 
+def tta_views(img_uint8):
+    """Asli, flip horizontal, flip vertikal, rotasi 180 derajat."""
+    return [img_uint8, img_uint8[:, ::-1], img_uint8[::-1, :], img_uint8[::-1, ::-1]]
+
+
+def predict_probs(img_uint8, engine, use_tta):
+    """Probabilitas 6 kelas dari model Keras atau TFLite, dengan atau tanpa TTA."""
+    views = tta_views(img_uint8) if use_tta else [img_uint8]
+    batch = np.stack([np.ascontiguousarray(v) for v in views]).astype(np.float32)
+    if engine == "Keras":
+        probs = MODEL(batch, training=False).numpy()
+    else:
+        interp, inp, out = load_tflite(TFLITE_FILES[engine])
+        probs = []
+        for x in batch:
+            interp.set_tensor(inp, x[None])
+            interp.invoke()
+            probs.append(interp.get_tensor(out)[0].copy())
+        probs = np.array(probs)
+    return probs.mean(axis=0)
+
+
 def overlay(img_uint8, cam, alpha=0.45):
     heat = tf.image.resize(cam[..., None], (IMG_SIZE, IMG_SIZE)).numpy()[..., 0]
     color = matplotlib.colormaps["jet"](heat)[..., :3]
@@ -91,6 +130,13 @@ with st.sidebar:
                           help=f"Default {DEFAULT_THRESHOLD:.2f}, dipilih dari data validation saat training. "
                                "Prediksi dengan keyakinan di bawah ambang ini ditolak.")
     show_cam = st.checkbox("Tampilkan Grad-CAM", value=True)
+    engines = ["Keras"] + list(TFLITE_FILES)
+    engine = st.selectbox("Model", engines, index=0,
+                          help="Keras = model asli (Tugas-1). TFLite = model terkompresi (Proyek-1), "
+                               "ukuran jauh lebih kecil dengan akurasi yang hampir sama.")
+    use_tta = st.checkbox("Test-Time Augmentation (TTA)", value=False,
+                          help="Prediksi dirata-rata dari 4 versi gambar (asli, flip horizontal, "
+                               "flip vertikal, rotasi 180°) agar lebih stabil.")
     st.divider()
     st.subheader("Cara penggunaan")
     st.markdown(
@@ -123,8 +169,9 @@ except Exception:
 
 t0 = time.time()
 img = preprocess(pil_img)
-cam, probs = grad_cam(img)
+probs = predict_probs(img, engine, use_tta)
 elapsed = (time.time() - t0) * 1000
+cam, _ = grad_cam(img) if show_cam else (None, None)
 
 idx = int(probs.argmax())
 conf = float(probs[idx])
@@ -134,7 +181,7 @@ col_img, col_res = st.columns(2)
 with col_img:
     st.image(pil_img.convert("RGB"), caption="Gambar yang diunggah", width="stretch")
     if show_cam:
-        st.image(overlay(img, cam), caption="Grad-CAM", width="stretch")
+        st.image(overlay(img, cam), caption="Grad-CAM (dihitung dari model Keras pada gambar asli)", width="stretch")
 
 with col_res:
     if conf >= threshold:
@@ -152,4 +199,5 @@ with col_res:
             .sort_values("Probabilitas", ascending=False).reset_index(drop=True))
     for _, row in df.iterrows():
         st.progress(row["Probabilitas"], text=f"{row['Kelas']}: {row['Probabilitas']:.2%}")
-    st.caption(f"Waktu inferensi: {elapsed:.0f} ms")
+    st.caption(f"Model: {engine} | TTA: {'aktif (4 versi gambar)' if use_tta else 'nonaktif'} | "
+               f"Waktu inferensi: {elapsed:.0f} ms")
